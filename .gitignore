@@ -1,0 +1,15 @@
+# 本地环境变量
+.env
+
+# 运行时数据
+acme/*
+certs/*
+!acme/.gitkeep
+!certs/.gitkeep
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 本地编辑器
+.DS_Store

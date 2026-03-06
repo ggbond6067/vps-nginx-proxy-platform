@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>反代平台管理面板</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>反代平台管理面板</h1>
+        <p>
+          Nginx 容器：<code>{{ nginx_container_name }}</code> |
+          证书容器：<code>{{ cert_agent_container_name }}</code> |
+          面板认证：<code>{{ "已启用" if panel_auth_enabled else "未启用" }}</code>
+        </p>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <section class="message-area">
+        {% for category, message in messages %}
+        <div class="msg {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </section>
+      {% endif %}
+      {% endwith %}
+
+      <section class="card">
+        <h2>环境检测</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>检查项</th>
+              <th>状态</th>
+              <th>详情</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in env_items %}
+            <tr>
+              <td>{{ item.name }}</td>
+              <td>
+                <span class="badge {{ 'ok' if item.ok else 'bad' }}">
+                  {{ "通过" if item.ok else "失败" }}
+                </span>
+              </td>
+              <td><code>{{ item.detail }}</code></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>新增/更新路由</h2>
+        <form method="post" action="{{ url_for('add_route') }}" class="grid-form">
+          <label>
+            域名（子域名）
+            <input name="domain" placeholder="api.example.com" required />
+          </label>
+          <label>
+            服务名（Docker 服务名或容器名）
+            <input name="service_name" placeholder="new-api" required />
+          </label>
+          <label>
+            服务端口（容器内部端口）
+            <input name="service_port" value="8000" required />
+          </label>
+          <label>
+            备注（可选）
+            <input name="remark" placeholder="例如：new-api 主服务" />
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" name="bind_dns" />
+            保存路由后自动绑定 Cloudflare DNS（A 记录）
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" name="enable_https" checked />
+            启用 HTTPS（申请证书后自动生效）
+          </label>
+          <button type="submit">保存路由并重载 Nginx</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>当前路由</h2>
+          <form method="post" action="{{ url_for('reload_nginx') }}">
+            <button type="submit" class="secondary">手动重载 Nginx</button>
+          </form>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>域名</th>
+              <th>目标服务</th>
+              <th>HTTPS</th>
+              <th>证书状态</th>
+              <th>备注</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if routes %}
+            {% for route in routes %}
+            <tr>
+              <td><code>{{ route.domain }}</code></td>
+              <td><code>{{ route.service_name }}:{{ route.service_port }}</code></td>
+              <td>
+                <form method="post" action="{{ url_for('route_https') }}">
+                  <input type="hidden" name="domain" value="{{ route.domain }}" />
+                  <label class="checkbox inline-checkbox">
+                    <input type="checkbox" name="enable_https" {% if route.enable_https %}checked{% endif %} onchange="this.form.submit()" />
+                    {{ "开启" if route.enable_https else "关闭" }}
+                  </label>
+                </form>
+              </td>
+              <td>
+                {% if route.https_active %}
+                <span class="badge ok">已生效</span>
+                {% elif route.cert_exists %}
+                <span class="badge warn">待启用</span>
+                {% else %}
+                <span class="badge bad">未申请</span>
+                {% endif %}
+              </td>
+              <td>{{ route.remark or '-' }}</td>
+              <td class="actions">
+                <form method="post" action="{{ url_for('bind_dns') }}">
+                  <input type="hidden" name="domain" value="{{ route.domain }}" />
+                  <button type="submit" class="secondary">绑定 DNS</button>
+                </form>
+                <form method="post" action="{{ url_for('issue_cert') }}">
+                  <input type="hidden" name="domain" value="{{ route.domain }}" />
+                  <button type="submit" class="secondary">申请证书</button>
+                </form>
+                <form method="post" action="{{ url_for('delete_route') }}" onsubmit="return confirm('确认删除该路由？');">
+                  <input type="hidden" name="domain" value="{{ route.domain }}" />
+                  <button type="submit" class="danger">删除</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+              <td colspan="6">暂无路由，请先添加。</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </body>
+</html>
