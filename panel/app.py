@@ -106,7 +106,9 @@ def _render_one_conf(route: Dict[str, object]) -> str:
     enable_https = _to_bool(route.get("enable_https"), default=True)
     tls_available = enable_https and _cert_ready(domain)
 
-    http_proxy_snippet = f"""proxy_http_version 1.1;
+    http_proxy_snippet = f"""resolver 127.0.0.11 valid=30s ipv6=off;
+    set $upstream "{service_name}:{service_port}";
+    proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -118,7 +120,7 @@ def _render_one_conf(route: Dict[str, object]) -> str:
     proxy_read_timeout 120s;
     proxy_send_timeout 120s;
 
-    proxy_pass http://{service_name}:{service_port};"""
+    proxy_pass http://$upstream;"""
 
     if not tls_available:
         return f"""server {{
@@ -140,7 +142,8 @@ def _render_one_conf(route: Dict[str, object]) -> str:
 }}
 
 server {{
-  listen 443 ssl http2;
+  listen 443 ssl;
+  http2 on;
   server_name {domain};
 
   ssl_certificate {fullchain_path};
