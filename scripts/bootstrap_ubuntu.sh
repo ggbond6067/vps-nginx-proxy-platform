@@ -42,7 +42,9 @@ else
 fi
 
 CURRENT_USER="${SUDO_USER:-$(whoami)}"
-if id -nG "$CURRENT_USER" | grep -qw docker; then
+if [ "$CURRENT_USER" = "root" ]; then
+  echo "[步骤] 当前用户为 root，无需加入 docker 组。"
+elif id -nG "$CURRENT_USER" | grep -qw docker; then
   echo "[步骤] 用户 $CURRENT_USER 已在 docker 组，跳过。"
 else
   echo "[步骤] 将用户 $CURRENT_USER 加入 docker 组..."

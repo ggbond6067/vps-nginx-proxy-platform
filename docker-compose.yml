@@ -14,7 +14,7 @@ services:
       - proxy_net
 
   cert-agent:
-    image: neilpang/acme.sh:3
+    image: neilpang/acme.sh
     container_name: cert-agent
     restart: unless-stopped
     env_file:
