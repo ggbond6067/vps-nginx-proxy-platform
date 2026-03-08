@@ -27,10 +27,18 @@ cp .env.example .env
 bash scripts/bootstrap_ubuntu.sh
 ```
 
-4. 启动平台：
+4. 配置管理面板镜像：
+
+在 `.env` 中设置：
 
 ```bash
-docker compose up -d --build
+PANEL_IMAGE=docker.io/<你的DockerHub用户名>/vps-nginx-proxy-platform-proxy-panel:latest
+```
+
+5. 启动平台：
+
+```bash
+docker compose up -d
 ```
 
 5. 访问管理面板（默认只监听本机回环）：
@@ -79,6 +87,43 @@ vps-nginx-proxy-platform/
 - **动态路由**：基于 `panel/config/routes.json` 自动生成 `nginx/conf.d/*.conf`
 - **自动重载**：路由变更后自动执行 Nginx reload
 - **SSO/Token 场景适配**：你可以继续在本地跑注册流程，VPS 只做反代与接口转发
+
+## 镜像更新模式
+
+为了支持在服务器上通过 `docker compose pull` 更新 `proxy-panel`，当前配置同时保留了：
+
+- `image:`：用于拉取 Docker Hub 已发布镜像
+- `build:`：用于本地开发或手动重建镜像
+
+推荐更新流程：
+
+```bash
+git pull
+docker compose pull
+docker compose up -d
+```
+
+如果只是镜像更新，且 `docker-compose.yml` 没变，也可以只执行：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### Docker Hub 自动发布
+
+仓库已包含工作流 `.github/workflows/publish-proxy-panel.yml`，会在 `main` 分支的 `panel/` 内容变更后自动构建并推送面板镜像到 Docker Hub。
+
+需要在 GitHub 仓库 Secrets 中配置：
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
+
+推送后的镜像名格式为：
+
+```text
+docker.io/<DOCKERHUB_USERNAME>/<仓库名>-proxy-panel:latest
+```
 
 ## 文档入口
 

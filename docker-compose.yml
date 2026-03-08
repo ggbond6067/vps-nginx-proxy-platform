@@ -30,6 +30,7 @@ services:
       - proxy_net
 
   proxy-panel:
+    image: ${PANEL_IMAGE:-docker.io/your-dockerhub-username/vps-nginx-proxy-platform-proxy-panel:latest}
     build:
       context: ./panel
     container_name: proxy-panel
@@ -44,17 +45,22 @@ services:
       - ROUTES_FILE=/app/config/routes.json
       - NGINX_CONF_DIR=/app/nginx/conf.d
       - CERTS_DIR=/app/certs
+      - SERVICES_DIR=/app/services
       - PANEL_USER=${PANEL_USER:-}
       - PANEL_PASSWORD=${PANEL_PASSWORD:-}
       - VPS_PUBLIC_IP=${VPS_PUBLIC_IP:-}
+      - VPS_PUBLIC_IPV4=${VPS_PUBLIC_IPV4:-}
+      - VPS_PUBLIC_IPV6=${VPS_PUBLIC_IPV6:-}
       - CF_API_TOKEN=${CF_API_TOKEN:-}
       - CF_ZONE_ID=${CF_ZONE_ID:-}
       - CF_PROXIED=${CF_PROXIED:-true}
       - CF_TTL=${CF_TTL:-1}
+      - PROXY_NETWORK_NAME=${PROXY_NETWORK_NAME:-proxy_net}
     volumes:
       - ./panel/config:/app/config
       - ./nginx/conf.d:/app/nginx/conf.d
       - ./certs:/app/certs
+      - ./services:/app/services
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - nginx-gateway

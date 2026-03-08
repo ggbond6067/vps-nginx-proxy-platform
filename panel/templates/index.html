@@ -7,150 +7,302 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body>
-    <div class="container">
-      <header>
-        <h1>反代平台管理面板</h1>
-        <p>
-          Nginx 容器：<code>{{ nginx_container_name }}</code> |
-          证书容器：<code>{{ cert_agent_container_name }}</code> |
-          面板认证：<code>{{ "已启用" if panel_auth_enabled else "未启用" }}</code>
-        </p>
-      </header>
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-      <section class="message-area">
-        {% for category, message in messages %}
-        <div class="msg {{ category }}">{{ message }}</div>
-        {% endfor %}
-      </section>
-      {% endif %}
-      {% endwith %}
-
-      <section class="card">
-        <h2>环境检测</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>检查项</th>
-              <th>状态</th>
-              <th>详情</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for item in env_items %}
-            <tr>
-              <td>{{ item.name }}</td>
-              <td>
-                <span class="badge {{ 'ok' if item.ok else 'bad' }}">
-                  {{ "通过" if item.ok else "失败" }}
-                </span>
-              </td>
-              <td><code>{{ item.detail }}</code></td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </section>
-
-      <section class="card">
-        <h2>新增/更新路由</h2>
-        <form method="post" action="{{ url_for('add_route') }}" class="grid-form">
-          <label>
-            域名（子域名）
-            <input name="domain" placeholder="api.example.com" required />
-          </label>
-          <label>
-            服务名（Docker 服务名或容器名）
-            <input name="service_name" placeholder="new-api" required />
-          </label>
-          <label>
-            服务端口（容器内部端口）
-            <input name="service_port" value="8000" required />
-          </label>
-          <label>
-            备注（可选）
-            <input name="remark" placeholder="例如：new-api 主服务" />
-          </label>
-          <label class="checkbox">
-            <input type="checkbox" name="bind_dns" />
-            保存路由后自动绑定 Cloudflare DNS（A 记录）
-          </label>
-          <label class="checkbox">
-            <input type="checkbox" name="enable_https" checked />
-            启用 HTTPS（申请证书后自动生效）
-          </label>
-          <button type="submit">保存路由并重载 Nginx</button>
-        </form>
-      </section>
-
-      <section class="card">
-        <div class="section-head">
-          <h2>当前路由</h2>
-          <form method="post" action="{{ url_for('reload_nginx') }}">
-            <button type="submit" class="secondary">手动重载 Nginx</button>
-          </form>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div>
+          <h1>Proxy Panel</h1>
+          <p>扁平化路由、部署与监控工作台</p>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>域名</th>
-              <th>目标服务</th>
-              <th>HTTPS</th>
-              <th>证书状态</th>
-              <th>备注</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% if routes %}
-            {% for route in routes %}
-            <tr>
-              <td><code>{{ route.domain }}</code></td>
-              <td><code>{{ route.service_name }}:{{ route.service_port }}</code></td>
-              <td>
-                <form method="post" action="{{ url_for('route_https') }}">
-                  <input type="hidden" name="domain" value="{{ route.domain }}" />
-                  <label class="checkbox inline-checkbox">
-                    <input type="checkbox" name="enable_https" {% if route.enable_https %}checked{% endif %} onchange="this.form.submit()" />
-                    {{ "开启" if route.enable_https else "关闭" }}
-                  </label>
-                </form>
-              </td>
-              <td>
-                {% if route.https_active %}
-                <span class="badge ok">已生效</span>
-                {% elif route.cert_exists %}
-                <span class="badge warn">待启用</span>
-                {% else %}
-                <span class="badge bad">未申请</span>
-                {% endif %}
-              </td>
-              <td>{{ route.remark or '-' }}</td>
-              <td class="actions">
-                <form method="post" action="{{ url_for('bind_dns') }}">
-                  <input type="hidden" name="domain" value="{{ route.domain }}" />
-                  <button type="submit" class="secondary">绑定 DNS</button>
-                </form>
-                <form method="post" action="{{ url_for('issue_cert') }}">
-                  <input type="hidden" name="domain" value="{{ route.domain }}" />
-                  <button type="submit" class="secondary">申请证书</button>
-                </form>
-                <form method="post" action="{{ url_for('delete_route') }}" onsubmit="return confirm('确认删除该路由？');">
-                  <input type="hidden" name="domain" value="{{ route.domain }}" />
-                  <button type="submit" class="danger">删除</button>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-            {% else %}
-            <tr>
-              <td colspan="6">暂无路由，请先添加。</td>
-            </tr>
-            {% endif %}
-          </tbody>
-        </table>
-      </section>
+        <nav class="nav-links">
+          <a href="#overview">概览</a>
+          <a href="#routes">路由</a>
+          <a href="#deploy">部署</a>
+          <a href="#monitor">监控</a>
+        </nav>
+        <div class="sidebar-meta">
+          <div><span>Nginx</span><code>{{ nginx_container_name }}</code></div>
+          <div><span>证书</span><code>{{ cert_agent_container_name }}</code></div>
+          <div><span>反代网络</span><code>{{ proxy_network_name }}</code></div>
+          <div><span>认证</span><code>{{ "已启用" if panel_auth_enabled else "未启用" }}</code></div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="page-header">
+          <div>
+            <p class="eyebrow">VPS Nginx Proxy Platform</p>
+            <h2>现代化运维控制台</h2>
+            <p class="subtle">支持 Cloudflare 多主域切换、智能路由、Compose 一键部署与 Docker 监控。</p>
+          </div>
+          <div class="header-actions">
+            <button id="refresh-all" class="secondary">刷新数据</button>
+            <button id="reload-nginx" class="ghost">重载 Nginx</button>
+          </div>
+        </header>
+
+        <section id="toast-area" class="toast-area"></section>
+
+        <section id="overview" class="section-block">
+          <div class="section-title">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h3>概览</h3>
+            </div>
+          </div>
+          <div id="summary-cards" class="summary-grid"></div>
+          <div class="panel-grid two-columns">
+            <article class="panel-card">
+              <div class="panel-head">
+                <h4>公网 IP</h4>
+                <span class="muted">自动探测 + 配置回退</span>
+              </div>
+              <div id="public-ip-cards" class="mini-grid"></div>
+            </article>
+            <article class="panel-card">
+              <div class="panel-head">
+                <h4>环境检测</h4>
+                <span class="muted">运行条件与依赖状态</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>检查项</th><th>状态</th><th>详情</th></tr>
+                  </thead>
+                  <tbody id="env-table-body"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="routes" class="section-block">
+          <div class="section-title">
+            <div>
+              <p class="eyebrow">Routes</p>
+              <h3>路由管理</h3>
+            </div>
+          </div>
+          <div class="panel-grid two-columns">
+            <article class="panel-card">
+              <div class="panel-head">
+                <h4>新增 / 更新路由</h4>
+                <span class="muted">主域切换 + 智能服务发现</span>
+              </div>
+              <form id="route-form" class="stack-form">
+                <input type="hidden" id="route-original-domain" />
+                <div id="zone-selector-group" class="field-group">
+                  <label for="route-zone-id">主域</label>
+                  <select id="route-zone-id"></select>
+                  <small id="zone-mode-hint" class="hint"></small>
+                </div>
+                <div id="full-domain-group" class="field-group hidden">
+                  <label for="route-full-domain">完整域名</label>
+                  <input id="route-full-domain" placeholder="api.example.com" />
+                </div>
+                <div id="prefix-group" class="field-group">
+                  <label for="route-dns-prefix">DNS 前缀</label>
+                  <input id="route-dns-prefix" placeholder="api 或 @" />
+                  <small class="hint">留空或输入 <code>@</code> 表示根域。</small>
+                </div>
+                <div class="field-group">
+                  <label>完整域名预览</label>
+                  <div id="route-domain-preview" class="preview-box">-</div>
+                </div>
+                <div class="field-group">
+                  <label for="route-service-select">目标服务</label>
+                  <select id="route-service-select"></select>
+                  <small class="hint">仅显示已接入反代网络且正在运行的容器。</small>
+                </div>
+                <div class="field-group">
+                  <label for="route-service-name">服务名（可手动覆盖）</label>
+                  <input id="route-service-name" placeholder="service-name" required />
+                </div>
+                <div class="field-group two-up">
+                  <div>
+                    <label for="route-service-port">服务端口</label>
+                    <input id="route-service-port" value="8000" />
+                  </div>
+                  <div>
+                    <label for="route-dns-record-type">DNS 类型</label>
+                    <select id="route-dns-record-type">
+                      <option value="A">A</option>
+                      <option value="AAAA">AAAA</option>
+                      <option value="CNAME">CNAME</option>
+                    </select>
+                  </div>
+                </div>
+                <div id="route-dns-value-group" class="field-group hidden">
+                  <label for="route-dns-value">DNS 目标值</label>
+                  <input id="route-dns-value" placeholder="target.example.com" />
+                  <small class="hint">仅 CNAME 需要手动填写目标域名。</small>
+                </div>
+                <div class="field-group">
+                  <label for="route-remark">备注</label>
+                  <input id="route-remark" placeholder="例如：主 API 服务" />
+                </div>
+                <div class="toggle-row">
+                  <label class="switch"><input type="checkbox" id="route-bind-dns" /><span>保存后自动绑定 DNS</span></label>
+                  <label class="switch"><input type="checkbox" id="route-enable-https" checked /><span>启用 HTTPS</span></label>
+                </div>
+                <div class="action-row">
+                  <button type="submit">保存路由</button>
+                  <button type="button" id="route-reset" class="secondary">重置表单</button>
+                </div>
+              </form>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-head">
+                <h4>当前路由</h4>
+                <span id="routes-count" class="muted">0 条记录</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>域名</th>
+                      <th>目标服务</th>
+                      <th>DNS</th>
+                      <th>HTTPS</th>
+                      <th>证书</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="routes-table-body"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="deploy" class="section-block">
+          <div class="section-title">
+            <div>
+              <p class="eyebrow">Deployment</p>
+              <h3>一键部署工作台</h3>
+            </div>
+          </div>
+          <div class="panel-grid two-columns">
+            <article class="panel-card">
+              <div class="panel-head">
+                <h4>通用部署器</h4>
+                <span class="muted">生成并编辑 Docker Compose</span>
+              </div>
+              <form id="deploy-form" class="stack-form">
+                <div class="field-group two-up">
+                  <div>
+                    <label for="deploy-project-slug">项目标识</label>
+                    <input id="deploy-project-slug" placeholder="new-api" required />
+                  </div>
+                  <div>
+                    <label for="deploy-service-name">主服务名</label>
+                    <input id="deploy-service-name" placeholder="new-api" required />
+                  </div>
+                </div>
+                <div class="field-group two-up">
+                  <div>
+                    <label for="deploy-image">镜像</label>
+                    <input id="deploy-image" placeholder="ghcr.io/demo/app:latest" required />
+                  </div>
+                  <div>
+                    <label for="deploy-container-name">容器名</label>
+                    <input id="deploy-container-name" placeholder="new-api" />
+                  </div>
+                </div>
+                <div class="field-group two-up">
+                  <div>
+                    <label for="deploy-port">内部端口</label>
+                    <input id="deploy-port" value="8000" />
+                  </div>
+                  <div>
+                    <label for="deploy-restart">重启策略</label>
+                    <select id="deploy-restart">
+                      <option value="unless-stopped">unless-stopped</option>
+                      <option value="always">always</option>
+                      <option value="on-failure">on-failure</option>
+                      <option value="no">no</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field-group">
+                  <label for="deploy-command">启动命令</label>
+                  <input id="deploy-command" placeholder="留空表示使用镜像默认命令" />
+                </div>
+                <div class="field-group">
+                  <label for="deploy-env">环境变量</label>
+                  <textarea id="deploy-env" rows="6" placeholder="KEY=value"></textarea>
+                </div>
+                <div class="field-group">
+                  <label for="deploy-volumes">挂载</label>
+                  <textarea id="deploy-volumes" rows="6" placeholder="./data:/app/data"></textarea>
+                </div>
+                <div class="action-row">
+                  <button type="button" id="compose-generate">生成 Compose</button>
+                  <button type="button" id="compose-validate" class="secondary">校验 Compose</button>
+                </div>
+              </form>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-head">
+                <h4>Compose 编辑器</h4>
+                <span class="muted">保存、重载、部署</span>
+              </div>
+              <div class="field-group compact">
+                <label for="deploy-project-list">已有项目</label>
+                <select id="deploy-project-list"></select>
+              </div>
+              <textarea id="compose-editor" class="code-editor" spellcheck="false"></textarea>
+              <div class="action-row wrap">
+                <button type="button" id="compose-save">保存 Compose</button>
+                <button type="button" id="compose-deploy">保存并部署</button>
+                <button type="button" id="compose-load" class="secondary">加载选中项目</button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="monitor" class="section-block">
+          <div class="section-title">
+            <div>
+              <p class="eyebrow">Monitoring</p>
+              <h3>Docker 监控</h3>
+            </div>
+            <span class="muted">每 15 秒自动刷新</span>
+          </div>
+          <div class="summary-grid" id="monitor-summary-cards"></div>
+          <div class="panel-grid two-columns">
+            <article class="panel-card">
+              <div class="panel-head">
+                <h4>Docker 引擎</h4>
+              </div>
+              <div id="engine-meta" class="meta-grid"></div>
+            </article>
+            <article class="panel-card">
+              <div class="panel-head">
+                <h4>容器运行情况</h4>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>容器</th>
+                      <th>状态</th>
+                      <th>CPU</th>
+                      <th>内存</th>
+                      <th>网络</th>
+                      <th>端口 / 网络</th>
+                    </tr>
+                  </thead>
+                  <tbody id="monitor-table-body"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
     </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
 </html>
